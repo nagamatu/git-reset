@@ -151,13 +151,33 @@ func (c *gitResetCall) gitReset(commitID string) error {
 	return nil
 }
 
+func removeTrackingFiles() error {
+	cmd := exec.Command("git", "ls-tree", "-r", "master", "--name-only")
+	out, err := cmd.Output()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if err = os.Remove(line); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	return nil
+}
+
 func main() {
 	token, ok := os.LookupEnv("AUTH_TOKEN")
 	if !ok {
 		panic(errors.New("AUTH_TOKEN must be defined"))
 	}
 
-	if len(os.Args) < 2 {
+	if len(os.Args) != 2 {
 		fmt.Printf("Usage: %s commit-id\n", os.Args[0])
 		return
 	}
@@ -171,6 +191,15 @@ func main() {
 	// 1st, try to use git command. quit if no error
 	if err = gitResetHard(commitID); err == nil {
 		return
+	}
+
+	if info.saas != "github.com" {
+		fmt.Printf("%s is not supported\n", info.saas)
+		return
+	}
+
+	if err = removeTrackingFiles(); err != nil {
+		panic(err)
 	}
 
 	ctx := context.Background()
