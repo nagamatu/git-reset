@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/google/go-github/v32/github"
@@ -19,7 +20,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func getGithubClient(ctx context.Context, token string) *github.Client {
+func newGithubClient(ctx context.Context, token string) *github.Client {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
@@ -111,7 +112,7 @@ func fileUpdate(path, contents, encoding string) error {
 	return nil
 }
 
-func gitResetHard(commitID string) error {
+func gitResetHardCmd(commitID string) error {
 	cmd := exec.Command("git", "reset", "--hard", commitID)
 	_, err := cmd.Output()
 	if err != nil {
@@ -120,17 +121,27 @@ func gitResetHard(commitID string) error {
 	return nil
 }
 
-type gitResetCall struct {
+func gitDiffNumstatCmd(baseCommitID, commitID string) error {
+	cmd := exec.Command("git", "diff", "--numstat", baseCommitID, commitID)
+	out, err := cmd.Output()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	fmt.Printf(string(out))
+	return nil
+}
+
+type gitCall struct {
 	info   *repoInfo
 	ctx    context.Context
 	client *github.Client
 }
 
-func newGitResetCall(ctx context.Context, client *github.Client, info *repoInfo, token string) *gitResetCall {
-	return &gitResetCall{info: info, ctx: ctx, client: client}
+func newGitCall(ctx context.Context, client *github.Client, info *repoInfo, token string) *gitCall {
+	return &gitCall{info: info, ctx: ctx, client: client}
 }
 
-func (c *gitResetCall) gitReset(commitID string) error {
+func (c *gitCall) gitReset(commitID string) error {
 	tree, _, err := c.client.Git.GetTree(c.ctx, c.info.owner, c.info.repo, commitID, true)
 	if err != nil {
 		return errors.WithStack(err)
@@ -149,6 +160,90 @@ func (c *gitResetCall) gitReset(commitID string) error {
 		}
 	}
 	return nil
+}
+
+type numStat struct {
+	filepath  string
+	additions int
+	deletions int
+}
+
+func newNumStat(f *github.CommitFile) *numStat {
+	return &numStat{filepath: f.GetFilename(), additions: f.GetAdditions(), deletions: f.GetDeletions()}
+}
+
+func (n *numStat) String() string {
+	return fmt.Sprintf("%d\t%d\t%s", n.additions, n.deletions, n.filepath)
+}
+
+func (n *numStat) Add(f *github.CommitFile) *numStat {
+	n.additions += f.GetAdditions()
+	n.deletions += f.GetDeletions()
+	return n
+}
+
+func (c *gitCall) gitDiffNumstat(baseCommitID, commitID string) error {
+	numStatMap := make(map[string]*numStat)
+	checkedSHA := make(map[string]bool)
+	found := false
+	parents := []*github.Commit{}
+	maxDepth := 100
+	for parents = append(parents, &github.Commit{SHA: &commitID}); !found && len(parents) > 0 && maxDepth > 0; maxDepth-- {
+		nextParents := []*github.Commit{}
+		for _, pc := range parents {
+			checkedSHA[pc.GetSHA()] = true
+			commit, _, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, pc.GetSHA())
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			for _, commitFile := range commit.Files {
+				numStat := numStatMap[commitFile.GetFilename()]
+				if numStat == nil {
+					numStatMap[commitFile.GetFilename()] = newNumStat(commitFile)
+				} else {
+					numStatMap[commitFile.GetFilename()] = numStat.Add(commitFile)
+				}
+			}
+
+			checkedSHA[commitID] = true
+
+			for _, p := range commit.Parents {
+				if p.GetSHA() == baseCommitID {
+					found = true
+					break
+				}
+				if checkedSHA[p.GetSHA()] {
+					continue
+				}
+				checkedSHA[p.GetSHA()] = true
+				nextParents = append(nextParents, p)
+			}
+
+			if found {
+				break
+			}
+		}
+		parents = nextParents
+	}
+
+	if !found {
+		return errors.New("base commit not found")
+	}
+
+	printStatNum(numStatMap)
+	return nil
+}
+
+func printStatNum(numStatMap map[string]*numStat) {
+	keys := []string{}
+	for key := range numStatMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fmt.Println(numStatMap[key].String())
+	}
 }
 
 func removeTrackingFiles() error {
@@ -171,42 +266,95 @@ func removeTrackingFiles() error {
 	return nil
 }
 
+func usageGitReset() {
+	fmt.Printf("Usage: %s commit-id\n", os.Args[0])
+	os.Exit(-1)
+}
+
+func usageGitDiffNumstat() {
+	fmt.Printf("Usage: %s base-commit-id commit-id\n", os.Args[0])
+	os.Exit(-1)
+}
+
+func usage() {
+	fmt.Printf("Must have a name \"git-reset\" or \"git-diff-numstat\".\n")
+	os.Exit(-1)
+}
+
+func gitReset(token string) error {
+	if len(os.Args) != 2 {
+		usageGitReset()
+		/*NOTREACHED*/
+	}
+
+	commitID := os.Args[1]
+	info, err := getRepoInfo()
+	if err != nil {
+		return err
+	}
+
+	// 1st, try to use git command. quit if no error
+	if err = gitResetHardCmd(commitID); err == nil {
+		return nil
+	}
+
+	if info.saas != "github.com" {
+		return errors.New(fmt.Sprintf("%s is not supported", info.saas))
+	}
+
+	if err = removeTrackingFiles(); err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	client := newGithubClient(ctx, token)
+	call := newGitCall(ctx, client, info, token)
+
+	return call.gitReset(commitID)
+}
+
+func gitDiffNumstat(token string) error {
+	if len(os.Args) != 3 {
+		usageGitDiffNumstat()
+		/*NOTREACHED*/
+	}
+
+	baseCommitID := os.Args[1]
+	commitID := os.Args[2]
+	info, err := getRepoInfo()
+	if err != nil {
+		return err
+	}
+
+	// 1st, try to use git command. quit if no error
+	if err = gitDiffNumstatCmd(baseCommitID, commitID); err == nil {
+		return nil
+	}
+
+	ctx := context.Background()
+	client := newGithubClient(ctx, token)
+	call := newGitCall(ctx, client, info, token)
+
+	return call.gitDiffNumstat(baseCommitID, commitID)
+}
+
 func main() {
 	token, ok := os.LookupEnv("AUTH_TOKEN")
 	if !ok {
 		panic(errors.New("AUTH_TOKEN must be defined"))
 	}
 
-	if len(os.Args) != 2 {
-		fmt.Printf("Usage: %s commit-id\n", os.Args[0])
-		return
+	var err error
+	switch filepath.Base(os.Args[0]) {
+	case "git-reset":
+		err = gitReset(token)
+	case "git-diff-numstat":
+		err = gitDiffNumstat(token)
+	default:
+		usage()
+		/*NOTREACHED*/
 	}
-
-	commitID := os.Args[1]
-	info, err := getRepoInfo()
 	if err != nil {
-		panic(err)
-	}
-
-	// 1st, try to use git command. quit if no error
-	if err = gitResetHard(commitID); err == nil {
-		return
-	}
-
-	if info.saas != "github.com" {
-		fmt.Printf("%s is not supported\n", info.saas)
-		return
-	}
-
-	if err = removeTrackingFiles(); err != nil {
-		panic(err)
-	}
-
-	ctx := context.Background()
-	client := getGithubClient(ctx, token)
-	call := newGitResetCall(ctx, client, info, token)
-
-	if err = call.gitReset(commitID); err != nil {
-		panic(err)
+		fmt.Printf("\nerror: %+v\n", err)
 	}
 }
