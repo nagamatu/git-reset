@@ -141,6 +141,16 @@ func gitShowDateCmd(commitID string) error {
 	return nil
 }
 
+func gitLogCmd(commitID string) error {
+	cmd := exec.Command("git", "log", "--format=%H", "-100", commitID)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	fmt.Printf(string(out))
+	return nil
+}
+
 type gitCall struct {
 	info   *repoInfo
 	ctx    context.Context
@@ -260,6 +270,40 @@ func (c *gitCall) gitShowDate(commitID string) error {
 	return nil
 }
 
+func (c *gitCall) gitLog(commitID string) error {
+	checkedSHA := make(map[string]bool)
+	count := 0
+	parents := []*github.Commit{}
+L:
+	for parents = append(parents, &github.Commit{SHA: &commitID}); len(parents) > 0 && count < 100; {
+		nextParents := []*github.Commit{}
+		for _, pc := range parents {
+			checkedSHA[pc.GetSHA()] = true
+			commit, _, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, pc.GetSHA())
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			checkedSHA[pc.GetSHA()] = true
+
+			for _, p := range commit.Parents {
+				if checkedSHA[p.GetSHA()] {
+					continue
+				}
+				checkedSHA[p.GetSHA()] = true
+				nextParents = append(nextParents, p)
+				fmt.Printf("%s\n", p.GetSHA())
+				count++
+				if count >= 100 {
+					break L
+				}
+			}
+		}
+		parents = nextParents
+	}
+
+	return nil
+}
 func printStatNum(numStatMap map[string]*numStat) {
 	keys := []string{}
 	for key := range numStatMap {
@@ -302,6 +346,11 @@ func usageGitDiffNumstat() {
 }
 
 func usageGitShowDate() {
+	fmt.Printf("Usage: %s commit-id\n", os.Args[0])
+	os.Exit(-1)
+}
+
+func usageGitLog() {
 	fmt.Printf("Usage: %s commit-id\n", os.Args[0])
 	os.Exit(-1)
 }
@@ -392,6 +441,30 @@ func gitShowDate(token string) error {
 	return call.gitShowDate(commitID)
 }
 
+func gitLog(token string) error {
+	if len(os.Args) != 2 {
+		usageGitLog()
+		/*NOTREACHED*/
+	}
+
+	commitID := os.Args[1]
+	info, err := getRepoInfo()
+	if err != nil {
+		return err
+	}
+
+	// 1st, try to use git command. quit if no error
+	if err = gitLogCmd(commitID); err == nil {
+		return nil
+	}
+
+	ctx := context.Background()
+	client := newGithubClient(ctx, token)
+	call := newGitCall(ctx, client, info, token)
+
+	return call.gitLog(commitID)
+}
+
 func main() {
 	token, ok := os.LookupEnv("AUTH_TOKEN")
 	if !ok {
@@ -406,6 +479,8 @@ func main() {
 		err = gitDiffNumstat(token)
 	case "git-show-date":
 		err = gitShowDate(token)
+	case "git-log":
+		err = gitLog(token)
 	default:
 		usage()
 		/*NOTREACHED*/
