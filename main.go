@@ -202,6 +202,23 @@ func (n *numStat) Add(f *github.CommitFile) *numStat {
 	return n
 }
 
+func (c *gitCall) addNumstatForCommit(p *github.Commit, numStatMap *map[string]*numStat) (*github.RepositoryCommit, error) {
+	commit, _, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, p.GetSHA())
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	for _, commitFile := range commit.Files {
+		numStat := (*numStatMap)[commitFile.GetFilename()]
+		if numStat == nil {
+			(*numStatMap)[commitFile.GetFilename()] = newNumStat(commitFile)
+		} else {
+			(*numStatMap)[commitFile.GetFilename()] = numStat.Add(commitFile)
+		}
+	}
+	return commit, nil
+}
+
 func (c *gitCall) gitDiffNumstat(baseCommitID, commitID string) error {
 	numStatMap := make(map[string]*numStat)
 	checkedSHA := make(map[string]bool)
@@ -212,24 +229,18 @@ func (c *gitCall) gitDiffNumstat(baseCommitID, commitID string) error {
 		nextParents := []*github.Commit{}
 		for _, pc := range parents {
 			checkedSHA[pc.GetSHA()] = true
-			commit, _, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, pc.GetSHA())
+			commit, err := c.addNumstatForCommit(pc, &numStatMap)
 			if err != nil {
 				return errors.WithStack(err)
-			}
-
-			for _, commitFile := range commit.Files {
-				numStat := numStatMap[commitFile.GetFilename()]
-				if numStat == nil {
-					numStatMap[commitFile.GetFilename()] = newNumStat(commitFile)
-				} else {
-					numStatMap[commitFile.GetFilename()] = numStat.Add(commitFile)
-				}
 			}
 
 			checkedSHA[commitID] = true
 
 			for _, p := range commit.Parents {
 				if p.GetSHA() == baseCommitID {
+					if _, err := c.addNumstatForCommit(p, &numStatMap); err != nil {
+						return errors.WithStack(err)
+					}
 					found = true
 					break
 				}
@@ -271,14 +282,14 @@ func (c *gitCall) gitShowDate(commitID string) error {
 }
 
 func (c *gitCall) gitLog(commitID string) error {
+	fmt.Printf("%s\n", commitID)
 	checkedSHA := make(map[string]bool)
 	count := 0
 	parents := []*github.Commit{}
 L:
-	for parents = append(parents, &github.Commit{SHA: &commitID}); len(parents) > 0 && count < 100; {
+	for parents = append(parents, &github.Commit{SHA: &commitID}); len(parents) > 0 && count < 20; {
 		nextParents := []*github.Commit{}
 		for _, pc := range parents {
-			checkedSHA[pc.GetSHA()] = true
 			commit, _, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, pc.GetSHA())
 			if err != nil {
 				return errors.WithStack(err)
