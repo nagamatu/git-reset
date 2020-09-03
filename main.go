@@ -348,6 +348,20 @@ L:
 
 	return nil
 }
+
+func (c *gitCall) gitCreateReference(branch, commitID string) error {
+	r := fmt.Sprintf("refs/heads/%s", branch)
+	ref := &github.Reference{Ref: &r, Object: &github.GitObject{SHA: &commitID}}
+	ref, resp, err := c.client.Git.CreateRef(c.ctx, c.info.owner, c.info.repo, ref)
+	if err != nil {
+		fmt.Printf("%v\n", resp)
+		return errors.WithStack(err)
+	}
+
+	fmt.Printf("%v\n", ref)
+	return nil
+}
+
 func printStatNum(numStatMap map[string]*numStat) {
 	keys := []string{}
 	for key := range numStatMap {
@@ -401,6 +415,11 @@ func usageGitShowDate() {
 
 func usageGitLog() {
 	fmt.Printf("Usage: %s commit-id\n", os.Args[0])
+	os.Exit(-1)
+}
+
+func usageGitCreateReference() {
+	fmt.Printf("Usage: %s branch commit-id\n", os.Args[0])
 	os.Exit(-1)
 }
 
@@ -539,6 +558,26 @@ func gitLog(token string) error {
 	return call.gitLog(commitID)
 }
 
+func gitCreateReference(token string) error {
+	if len(os.Args) != 3 {
+		usageGitCreateReference()
+		/*NOTREACHED*/
+	}
+
+	branch := os.Args[1]
+	commitID := os.Args[2]
+	info, err := getRepoInfo()
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	client := newGithubClient(ctx, token)
+	call := newGitCall(ctx, client, info, token)
+
+	return call.gitCreateReference(branch, commitID)
+}
+
 func main() {
 	token, ok := os.LookupEnv("AUTH_TOKEN")
 	if !ok {
@@ -557,6 +596,8 @@ func main() {
 		err = gitLog(token)
 	case "git-get-file":
 		err = gitGetFile(token)
+	case "git-create-reference":
+		err = gitCreateReference(token)
 	default:
 		usage()
 		/*NOTREACHED*/
