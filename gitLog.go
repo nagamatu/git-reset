@@ -11,18 +11,22 @@ import (
 )
 
 func (c *gitCall) gitLog(commitID string) error {
-	fmt.Printf("%s\n", commitID)
 	checkedSHA := make(map[string]bool)
 	count := 0
-	parents := []*github.Commit{}
-L:
-	for parents = append(parents, &github.Commit{SHA: &commitID}); len(parents) > 0 && count < 20; {
-		nextParents := []*github.Commit{}
-		for _, pc := range parents {
+	commits := []*github.Commit{}
+	for commits = append(commits, &github.Commit{SHA: &commitID}); len(commits) > 0 && count < 1; count++ {
+		parents := []*github.Commit{}
+		for _, pc := range commits {
 			commit, _, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, pc.GetSHA())
 			if err != nil {
 				return errors.WithStack(err)
 			}
+
+			fmt.Printf("%s ", pc.GetSHA())
+			for _, p := range commit.Parents {
+				fmt.Printf("%s ", p.GetSHA())
+			}
+			fmt.Printf("\n")
 
 			checkedSHA[pc.GetSHA()] = true
 
@@ -31,22 +35,17 @@ L:
 					continue
 				}
 				checkedSHA[p.GetSHA()] = true
-				nextParents = append(nextParents, p)
-				fmt.Printf("%s\n", p.GetSHA())
-				count++
-				if count >= 100 {
-					break L
-				}
+				parents = append(parents, p)
 			}
 		}
-		parents = nextParents
+		commits = parents
 	}
 
 	return nil
 }
 
 func gitLogCmd(commitID string) error {
-	cmd := exec.Command("git", "log", "--format=%H", "-100", commitID)
+	cmd := exec.Command("git", "log", "--format=%H %P", "-1", commitID)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return errors.WithStack(err)

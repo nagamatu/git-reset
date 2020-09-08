@@ -107,7 +107,7 @@ func (c *gitCall) gitDiffNumstat(baseCommitID, commitID string) error {
 }
 
 func gitDiffNumstatCmd(baseCommitID, commitID string) error {
-	cmd := exec.Command("git", "diff", "--numstat", baseCommitID, commitID)
+	cmd := exec.Command("git", "diff", "-c", "--numstat", baseCommitID, commitID)
 	out, err := cmd.Output()
 	if err != nil {
 		return errors.WithStack(err)
