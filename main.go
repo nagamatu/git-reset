@@ -142,6 +142,7 @@ func main() {
 			/*NOTREACHED*/
 		} else {
 			fmt.Printf("\nerror: %+v\n", err)
+			os.Exit(-1)
 		}
 	}
 }
