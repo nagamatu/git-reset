@@ -20,8 +20,12 @@ func gitShowDateCmd(commitID string) error {
 }
 
 func (c *gitCall) gitShowDate(commitID string) error {
-	commit, _, err := c.client.Git.GetCommit(c.ctx, c.info.owner, c.info.repo, commitID)
+retry:
+	commit, resp, err := c.client.Git.GetCommit(c.ctx, c.info.owner, c.info.repo, commitID)
 	if err != nil {
+		if isRateLimitThenWait(resp, err) {
+			goto retry
+		}
 		return errors.WithStack(err)
 	}
 	if commit.Author == nil {

@@ -32,8 +32,12 @@ func (n *numStat) Add(f *github.CommitFile) *numStat {
 }
 
 func (c *gitCall) addNumstatForCommit(p *github.Commit, numStatMap *map[string]*numStat) (*github.RepositoryCommit, error) {
-	commit, _, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, p.GetSHA())
+retry:
+	commit, resp, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, p.GetSHA())
 	if err != nil {
+		if isRateLimitThenWait(resp, err) {
+			goto retry
+		}
 		return nil, errors.WithStack(err)
 	}
 

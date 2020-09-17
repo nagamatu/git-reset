@@ -17,8 +17,12 @@ func (c *gitCall) gitLog(commitID string) error {
 	for commits = append(commits, &github.Commit{SHA: &commitID}); len(commits) > 0 && count < 1; count++ {
 		parents := []*github.Commit{}
 		for _, pc := range commits {
-			commit, _, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, pc.GetSHA())
+		retry:
+			commit, resp, err := c.client.Repositories.GetCommit(c.ctx, c.info.owner, c.info.repo, pc.GetSHA())
 			if err != nil {
+				if isRateLimitThenWait(resp, err) {
+					goto retry
+				}
 				return errors.WithStack(err)
 			}
 

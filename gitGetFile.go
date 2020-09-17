@@ -39,7 +39,8 @@ func removeTrackingFiles() error {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if err = os.Remove(line); err != nil {
-			return errors.WithStack(err)
+			// ignore error - dont care about it
+			//fmt.Fprintf(os.Stderr, "can't remove file: %s\n", line)
 		}
 	}
 
@@ -47,8 +48,12 @@ func removeTrackingFiles() error {
 }
 
 func (c *gitCall) gitGetFile(commitID, filepath string) ([]byte, error) {
-	tree, _, err := c.client.Git.GetTree(c.ctx, c.info.owner, c.info.repo, commitID, true)
+retry:
+	tree, resp, err := c.client.Git.GetTree(c.ctx, c.info.owner, c.info.repo, commitID, true)
 	if err != nil {
+		if isRateLimitThenWait(resp, err) {
+			goto retry
+		}
 		return nil, errors.WithStack(err)
 	}
 	for _, entry := range tree.Entries {
@@ -56,8 +61,12 @@ func (c *gitCall) gitGetFile(commitID, filepath string) ([]byte, error) {
 			continue
 		}
 		if entry.GetPath() == filepath {
-			blob, _, err := c.client.Git.GetBlob(c.ctx, c.info.owner, c.info.repo, entry.GetSHA())
+		retryGetBlob:
+			blob, resp, err := c.client.Git.GetBlob(c.ctx, c.info.owner, c.info.repo, entry.GetSHA())
 			if err != nil {
+				if isRateLimitThenWait(resp, err) {
+					goto retryGetBlob
+				}
 				return nil, errors.WithStack(err)
 			}
 			return getContent(blob)

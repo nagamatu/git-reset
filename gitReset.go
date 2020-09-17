@@ -32,8 +32,12 @@ func fileUpdate(path, contents, encoding string) error {
 }
 
 func (c *gitCall) gitReset(commitID string) error {
-	tree, _, err := c.client.Git.GetTree(c.ctx, c.info.owner, c.info.repo, commitID, true)
+retry:
+	tree, resp, err := c.client.Git.GetTree(c.ctx, c.info.owner, c.info.repo, commitID, true)
 	if err != nil {
+		if isRateLimitThenWait(resp, err) {
+			goto retry
+		}
 		return errors.WithStack(err)
 	}
 
@@ -41,8 +45,12 @@ func (c *gitCall) gitReset(commitID string) error {
 		if entry.GetType() == "tree" {
 			continue
 		}
-		blob, _, err := c.client.Git.GetBlob(c.ctx, c.info.owner, c.info.repo, entry.GetSHA())
+	retryGetBlob:
+		blob, resp, err := c.client.Git.GetBlob(c.ctx, c.info.owner, c.info.repo, entry.GetSHA())
 		if err != nil {
+			if isRateLimitThenWait(resp, err) {
+				goto retryGetBlob
+			}
 			return errors.WithStack(err)
 		}
 		if err = fileUpdate(entry.GetPath(), blob.GetContent(), blob.GetEncoding()); err != nil {

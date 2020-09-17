@@ -12,8 +12,12 @@ import (
 func (c *gitCall) gitCreateReference(branch, commitID string) error {
 	r := fmt.Sprintf("refs/heads/%s", branch)
 	ref := &github.Reference{Ref: &r, Object: &github.GitObject{SHA: &commitID}}
+retry:
 	ref, resp, err := c.client.Git.CreateRef(c.ctx, c.info.owner, c.info.repo, ref)
 	if err != nil {
+		if isRateLimitThenWait(resp, err) {
+			goto retry
+		}
 		fmt.Printf("%v\n", resp)
 		return errors.WithStack(err)
 	}
