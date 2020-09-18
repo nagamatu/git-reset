@@ -6,12 +6,10 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -93,48 +91,14 @@ func getRepoInfo() (*repoInfo, error) {
 	return &repoInfo{saas: u.Host, owner: ss[1], repo: ss[2]}, nil
 }
 
-var reRateReset = regexp.MustCompile(`([0-9]*)m([0-9]*)s`)
-
 func isRateLimitThenWait(resp *github.Response, err error) bool {
-	if resp.StatusCode == http.StatusForbidden {
-		remainStr := strings.TrimSpace(resp.Header.Get("X-RateLimit-Remaining"))
-		if remainStr == "0" {
-			resetTimeStr := resp.Header.Get("X-RateLimit-Reset")
-			resetTimeSec, err := strconv.ParseInt(resetTimeStr, 10, 64)
-			if err != nil {
-				return false
-			}
-			resetTime := time.Unix(resetTimeSec, 0)
-			dur := resetTime.Sub(time.Now()) + 30*time.Second
-			fmt.Fprintf(os.Stderr, "rate limit: waiting for %v\n", dur)
-			time.Sleep(dur)
-			return true
-		} else if len(remainStr) == 0 {
-			msg := err.Error()
-			if strings.Contains(msg, "API rate limit") {
-				// find duration pattern: ([0-9]*)m([0-9]*)s
-				m := reRateReset.FindStringSubmatch(msg)
-				if len(m) == 3 {
-					dur, err := time.ParseDuration(m[0])
-					if err != nil {
-						return false
-					}
-					dur = dur + 30*time.Second
-					fmt.Fprintf(os.Stderr, "rate limit: waiting for %v\n", dur)
-					time.Sleep(dur)
-					return true
-				}
-			} else {
-				dur, err := time.ParseDuration("10m")
-				if err != nil {
-					return false
-				}
-				fmt.Fprintf(os.Stderr, "rate limit: waiting for %v\n", dur)
-				time.Sleep(dur)
-				return true
-			}
-		}
+	if rateLimitErr, ok := err.(*github.RateLimitError); ok {
+		dur := rateLimitErr.Rate.Reset.Time.Sub(time.Now()) + 30 * time.Second
+		fmt.Fprintf(os.Stderr, "rate limit: waiting for %v\n", dur)
+		time.Sleep(dur)
+		return true
 	}
+
 	return false
 }
 
