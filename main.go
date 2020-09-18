@@ -119,6 +119,7 @@ func isRateLimitThenWait(resp *github.Response, err error) bool {
 					if err != nil {
 						return false
 					}
+					dur = dur + 30*time.Second
 					fmt.Fprintf(os.Stderr, "rate limit: waiting for %v\n", dur)
 					time.Sleep(dur)
 					return true
