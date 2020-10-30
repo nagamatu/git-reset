@@ -47,6 +47,6 @@ func gitCreateReference(token string) error {
 }
 
 func usageGitCreateReference() {
-	fmt.Printf("Usage: %s branch commit-id\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage: %s branch commit-id\n", os.Args[0])
 	os.Exit(-1)
 }

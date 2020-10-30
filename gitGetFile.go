@@ -101,6 +101,6 @@ func gitGetFile(token string) error {
 }
 
 func usageGitGetFile() {
-	fmt.Printf("Usage: %s commit-id filepath\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage: %s commit-id filepath\n", os.Args[0])
 	os.Exit(-1)
 }

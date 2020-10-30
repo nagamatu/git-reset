@@ -93,7 +93,7 @@ func getRepoInfo() (*repoInfo, error) {
 
 func isRateLimitThenWait(resp *github.Response, err error) bool {
 	if rateLimitErr, ok := err.(*github.RateLimitError); ok {
-		dur := rateLimitErr.Rate.Reset.Time.Sub(time.Now()) + 30 * time.Second
+		dur := rateLimitErr.Rate.Reset.Time.Sub(time.Now()) + 30*time.Second
 		fmt.Fprintf(os.Stderr, "rate limit: waiting for %v\n", dur)
 		time.Sleep(dur)
 		return true
@@ -113,7 +113,7 @@ func newGitCall(ctx context.Context, client *github.Client, info *repoInfo, toke
 }
 
 func usage(name string) {
-	fmt.Printf("Must have a name \"%s\".\n", name)
+	fmt.Fprintf(os.Stderr, "Must have a name \"%s\".\n", name)
 	os.Exit(-1)
 }
 
@@ -153,7 +153,7 @@ func main() {
 			usage(name)
 			/*NOTREACHED*/
 		} else {
-			fmt.Printf("\nerror: %+v\n", err)
+			fmt.Fprintf(os.Stderr, "\nerror: %+v\n", err)
 			os.Exit(-1)
 		}
 	}
