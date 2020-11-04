@@ -19,6 +19,10 @@ import (
 )
 
 func newGithubClient(ctx context.Context, token string) *github.Client {
+	if token == "" {
+		missingToken()
+		/*NOTREACHED*/
+	}
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
@@ -133,11 +137,13 @@ var commands = []gitCommand{
 
 var errNoSuchCommand = errors.New("no such command")
 
+func missingToken() {
+	fmt.Fprintf(os.Stderr, "AUTH_TOKEN must be defined")
+	os.Exit(-1)
+}
+
 func main() {
-	token, ok := os.LookupEnv("AUTH_TOKEN")
-	if !ok {
-		panic(errors.New("AUTH_TOKEN must be defined"))
-	}
+	token, _ := os.LookupEnv("AUTH_TOKEN")
 
 	name := path.Base(os.Args[0])
 	err := errNoSuchCommand
