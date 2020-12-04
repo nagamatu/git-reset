@@ -68,7 +68,7 @@ func (c *gitCall) gitDiffNumstat(baseCommitID, commitID string) error {
 	checkedSHA := make(map[string]bool)
 	found := false
 	parents := []*github.Commit{}
-	maxDepth := 100
+	maxDepth := 500
 	for parents = append(parents, &github.Commit{SHA: &commitID}); !found && len(parents) > 0 && maxDepth > 0; maxDepth-- {
 		nextParents := []*github.Commit{}
 		for _, pc := range parents {
@@ -103,7 +103,7 @@ func (c *gitCall) gitDiffNumstat(baseCommitID, commitID string) error {
 	}
 
 	if !found {
-		return errors.New("base commit not found")
+		return errors.New(fmt.Sprintf("base commit not found: %s", baseCommitID))
 	}
 
 	printStatNum(numStatMap)
