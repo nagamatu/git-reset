@@ -83,6 +83,6 @@ func gitLog(token string) error {
 }
 
 func usageGitLog() {
-	fmt.Printf("Usage: %s commit-id\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage: %s commit-id\n", os.Args[0])
 	os.Exit(-1)
 }

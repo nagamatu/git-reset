@@ -146,6 +146,6 @@ func gitDiffNumstat(token string) error {
 }
 
 func usageGitDiffNumstat() {
-	fmt.Printf("Usage: %s base-commit-id commit-id\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage: %s base-commit-id commit-id\n", os.Args[0])
 	os.Exit(-1)
 }

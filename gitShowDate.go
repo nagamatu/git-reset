@@ -63,6 +63,6 @@ func gitShowDate(token string) error {
 }
 
 func usageGitShowDate() {
-	fmt.Printf("Usage: %s commit-id\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage: %s commit-id\n", os.Args[0])
 	os.Exit(-1)
 }
