@@ -133,6 +133,7 @@ var commands = []gitCommand{
 	{"git-log", gitLog},
 	{"git-reset", gitReset},
 	{"git-show-date", gitShowDate},
+	{"git-rev-parse", gitRevParse},
 }
 
 var errNoSuchCommand = errors.New("no such command")
