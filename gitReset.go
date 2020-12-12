@@ -25,8 +25,9 @@ func fileUpdate(path, contents, encoding string) error {
 		s, err := os.Stat(path)
 		if !os.IsNotExist(err) {
 			if s.IsDir() {
-				fmt.Fprintf(os.Stderr, "%s is directory\n", path)
-				return nil
+				if err := os.RemoveAll(path); err != nil {
+					return errors.WithStack(err)
+				}
 			}
 		}
 		if err = ioutil.WriteFile(path, b64d, 0644); err != nil {
