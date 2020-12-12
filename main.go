@@ -98,6 +98,7 @@ func getRepoInfo() (*repoInfo, error) {
 func isRateLimitThenWait(resp *github.Response, err error) bool {
 	if rateLimitErr, ok := err.(*github.RateLimitError); ok {
 		dur := rateLimitErr.Rate.Reset.Time.Sub(time.Now()) + 30*time.Second
+		fmt.Fprintf(os.Stderr, "rate limit: waiting for %v\n", dur)
 		time.Sleep(dur)
 		return true
 	}
