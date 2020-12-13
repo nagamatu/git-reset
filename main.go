@@ -134,12 +134,13 @@ var commands = []gitCommand{
 	{"git-reset", gitReset},
 	{"git-show-date", gitShowDate},
 	{"git-rev-parse", gitRevParse},
+	{"git-get-pr-merge-commit", gitGetPRMergeCommit},
 }
 
 var errNoSuchCommand = errors.New("no such command")
 
 func missingToken() {
-	fmt.Fprintf(os.Stderr, "AUTH_TOKEN must be defined")
+	fmt.Fprintf(os.Stderr, "AUTH_TOKEN must be defined\n")
 	os.Exit(-1)
 }
 
