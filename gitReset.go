@@ -77,6 +77,21 @@ func gitResetHardCmd(commitID string) error {
 	return nil
 }
 
+func gitFetchCheckoutCmd(commitID string) error {
+	cmd := exec.Command("git", "fetch", "origin", commitID)
+	_, err := cmd.Output()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	cmd = exec.Command("git", "checkout", commitID)
+	_, err = cmd.Output()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
+
+}
+
 func gitReset(token string) error {
 	if len(os.Args) != 2 {
 		usageGitReset()
@@ -91,6 +106,10 @@ func gitReset(token string) error {
 
 	// 1st, try to use git command. quit if no error
 	if err = gitResetHardCmd(commitID); err == nil {
+		return nil
+	}
+
+	if err = gitFetchCheckoutCmd(commitID); err == nil {
 		return nil
 	}
 
